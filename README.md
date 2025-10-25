@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Paper Trim Calculator (MVP)
+
+AI-assisted web application that helps paper mill planners build optimal trim size production combinations. This MVP follows the requirements outlined in `docs/PRD.md` and reuses logic from the original prototype.
+
+## Tech Stack
+
+- Next.js 16 (App Router) with React 19 and TypeScript
+- Tailwind CSS 4 (JIT via `@tailwind` directives)
+- Supabase client (placeholder integration)
+- OpenAI Responses API (server-side)
+- XLSX & jsPDF for exports
+
+## Key Features
+
+- **Dynamic calculator UI**: Configure base mill settings, roll requirements, and flexible set combinations with live width/weight totals.
+- **AI "Fill with GPT"**: Calls `/api/optimize` which proxies to OpenAI for deckle-compliant set suggestions.
+- **History/API stubs**: REST endpoints prepared for Supabase-backed persistence.
+- **Data export**: One-click Excel (.xlsx) and PDF (.pdf) downloads of the current calculator state.
 
 ## Getting Started
 
-First, run the development server:
+1. Install dependencies:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+   ```bash
+   npm install
+   ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Create a `.env.local` with your keys:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+   ```bash
+   NEXT_PUBLIC_SUPABASE_URL=...
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+   OPENAI_API_KEY=sk-...
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. Run the development server:
 
-## Learn More
+   ```bash
+   npm run dev
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+4. Visit [http://localhost:3000](http://localhost:3000) and log in with the mock session (auto-signed in).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `src/app/page.tsx`: Main calculator experience.
+- `src/app/api/optimize/route.ts`: Server endpoint that calls OpenAI Responses API.
+- `src/utils/calculations.ts`: Deterministic width/weight aggregation helpers.
+- `src/utils/export.ts`: Excel/PDF export helpers.
+- `src/services/supabase.ts`: Server client placeholder for Supabase integration.
+- `docs/PRD.md`: Product requirements reference.
 
-## Deploy on Vercel
+## Next Steps
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Replace auth mock with Supabase Auth (Google SSO).
+- Implement Supabase CRUD endpoints for calculation history.
+- Harden OpenAI prompt + add retry/error telemetry.
+- Add Playwright or Cypress E2E tests around the calculator flow.
