@@ -57,20 +57,61 @@
 
 **5. 구현 계획 (High-Level Implementation Plan)**
 
-1. **1단계: 프로젝트 설정 및 인증 구현**
-    - Next.js, TypeScript, Tailwind CSS 기반의 프로젝트를 생성한다.
-    - Supabase 프로젝트를 설정하고 calculations 테이블 스키마를 정의한다.
-    - Supabase Auth를 연동하여 Google SSO 기반의 로그인, 로그아웃 및 세션 관리 기능을 구현한다.
-2. **2단계: 핵심 계산기 UI 및 기능 구축**
-    - 기본 정보 입력, 롤 정보 입력, 세트 조합 구성을 위한 동적 테이블 UI 컴포넌트를 개발한다.
-    - 사용자 입력에 따른 실시간 계산 로직을 프론트엔드에 구현한다.
-3. **3단계: AI 연동 및 백엔드 API 개발**
-    - Next.js API Route를 사용하여 OpenAI GPT-4 API를 호출하는 백엔드 엔드포인트(/api/optimize)를 개발한다. (API Key는 서버에서 안전하게 관리)
-    - 프론트엔드의 "AI로 채우기" 버튼과 백엔드 API를 연동하여 자동 최적화 기능을 완성한다.
-4. **4.단계: 기록 저장/불러오기 기능 구현**
-    - 계산 데이터를 Supabase DB에 저장, 조회, 수정, 삭제하는 CRUD API 엔드포인트를 개발한다.
-    - 계산기 페이지에 '저장' 기능을, '기록' 페이지에 목록 조회 및 '불러오기' 기능을 구현한다.
-5. **5단계: 최종 기능 및 배포**
-    - 데이터 Export(Excel, PDF) 기능을 구현한다.
-    - Vercel에 프로젝트를 연결하고 환경 변수를 설정하여 CI/CD 파이프라인을 구축하고 프로덕션 환경에 배포한다.
-    - 전체 기능에 대한 통합 테스트(E2E)를 수행한다.
+### ✅ 완료된 단계 (Completed)
+
+**✅ 1단계: 프로젝트 설정 및 인증 구현**
+- Next.js 16, TypeScript, Tailwind CSS 4 기반 프로젝트 생성 완료
+- Supabase 프로젝트 설정 및 calculations 테이블 스키마 정의 완료
+- Supabase Auth를 통한 Google SSO 연동 완료 (로그인, 로그아웃, 세션 관리)
+- Row Level Security (RLS) 정책 구현 완료
+
+**✅ 2단계: 핵심 계산기 UI 및 기능 구축**
+- 기본 정보 입력 UI (제지사, 평량, 롤 길이) 구현 완료
+- 동적 롤 입력 테이블 (추가/삭제 가능) 구현 완료
+- 동적 세트 조합 테이블 (추가/삭제 가능) 구현 완료
+- 실시간 계산 로직 및 시각적 피드백 구현 완료
+
+**✅ 3단계: AI 연동 및 백엔드 API 개발**
+- Next.js API Route `/api/optimize` 구현 완료
+- OpenAI Responses API (GPT-5-mini) 통합 완료
+- "AI로 채우기" 버튼 연동 및 자동 데이터 채우기 기능 구현 완료
+- 서버 사이드 API Key 관리 완료
+
+**✅ 4단계: 기록 저장/불러오기 기능 구현**
+- Supabase CRUD API 엔드포인트 (`/api/history`) 구현 완료
+- 계산 데이터 저장, 조회, 수정, 삭제 기능 구현 완료
+- 계산기 페이지의 저장 기능 구현 완료
+- 기록 목록 조회 및 불러오기 기능 구현 완료
+- 이름 변경 및 삭제 기능 구현 완료
+
+**✅ 5단계: 최종 기능 및 배포**
+- Excel(.xlsx) 및 PDF(.pdf) 내보내기 기능 구현 완료
+- Vercel CI/CD 파이프라인 구축 완료
+- 프로덕션 배포 완료 ([paper-trim-calculator.vercel.app](https://paper-trim-calculator.vercel.app))
+- 환경 변수 설정 완료
+
+### 📝 향후 개발 계획 (Future Roadmap)
+
+**🎯 단기 개선 사항 (Short-term)**
+- AI 프롬프트 엔지니어링 개선: GPT-5 모델의 JSON schema 출력 안정화 및 예측 가능성 향상
+- 계산 기록 UI/UX 개선: 검색, 필터링, 정렬 기능 추가
+- 로딩 상태 및 에러 처리 강화: 사용자 친화적인 피드백 메시지 추가
+- 반응형 디자인 최적화: 모바일 기기 지원 강화
+
+**🚀 중기 기능 추가 (Mid-term)**
+- 계산 템플릿 기능: 자주 사용하는 설정을 템플릿으로 저장
+- 데이터 시각화: Chart.js를 활용한 생산 효율 그래프 및 대시보드
+- 배치 가져오기/내보내기: CSV 파일로 다중 계산 내역 일괄 처리
+- 다국어 지원 (한국어, 영어, 일본어)
+
+**🌟 장기 비전 (Long-term)**
+- 사용자 간 계산 공유: 협업 기능 추가
+- 고급 분석 기능: ML 기반 효율성 예측 및 최적화 제안
+- API 제공: 외부 시스템 연동을 위한 RESTful API
+- 통합 테스트: Playwright/Cypress 기반 E2E 테스트 스위트 구축
+
+**📊 기술 부채 관리**
+- TypeScript strict mode 적용
+- 코드 재사용성 개선 (컴포넌트 추상화)
+- 성능 최적화 (Code splitting, lazy loading)
+- 접근성(A11y) 개선 (WCAG 2.1 AA 준수)
