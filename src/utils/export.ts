@@ -74,7 +74,7 @@ export function exportToPdf(data: ExportPayload) {
       roll.requiredTons || "",
       ...roll.quantities,
     ]),
-    startY: doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : 48,
+    startY: (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 10 : 48,
     theme: "grid",
   });
 
