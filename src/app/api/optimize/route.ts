@@ -35,46 +35,18 @@ export async function POST(request: NextRequest) {
       max_output_tokens: 800,
       reasoning: { effort: "medium" },
       text: { verbosity: "low" },
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "TrimPlan",
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              sets: {
-                type: "array",
-                maxItems: 5,
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    multiplier: {
-                      type: "integer",
-                      minimum: 1,
-                      maximum: 20,
-                    },
-                    combination: {
-                      type: "object",
-                      additionalProperties: {
-                        type: "integer",
-                        minimum: 0,
-                        maximum: 99,
-                      },
-                    },
-                  },
-                  required: ["multiplier", "combination"],
-                },
-              },
-            },
-            required: ["sets"],
-          },
-        },
-      },
     });
 
-    const suggestion = completion.output?.[0]?.parsed ?? { sets: [] };
+    const outputItem = completion.output?.[0];
+    let text = "";
+    
+    if (outputItem && "content" in outputItem) {
+      text = Array.isArray(outputItem.content) 
+        ? outputItem.content.map((item: any) => "text" in item ? item.text : "").join("")
+        : "";
+    }
+    
+    const suggestion = parseResponse(text);
 
     return NextResponse.json(suggestion);
   } catch (error) {
@@ -118,6 +90,26 @@ Example:
 
 If no feasible plan exists, return {"sets":[]}.
 `;
+}
+
+function parseResponse(text: string) {
+  try {
+    // Try to extract JSON from the response
+    const jsonStart = text.indexOf("{");
+    const jsonEnd = text.lastIndexOf("}");
+    
+    if (jsonStart === -1 || jsonEnd === -1) {
+      return { sets: [] };
+    }
+    
+    const jsonString = text.slice(jsonStart, jsonEnd + 1);
+    const parsed = JSON.parse(jsonString);
+    
+    return parsed;
+  } catch (error) {
+    console.error("Failed to parse OpenAI response", error);
+    return { sets: [] };
+  }
 }
 
 
