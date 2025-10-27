@@ -29,6 +29,17 @@ export type CalculatorSnapshot = {
   sets: SetColumn[];
 };
 
+export type HistorySummary = {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HistoryItem = HistorySummary & {
+  data: CalculatorSnapshot;
+};
+
 export type AISuggestion = {
   sets: Array<{
     multiplier: number;

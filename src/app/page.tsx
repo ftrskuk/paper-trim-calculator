@@ -1,12 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MILL_DECKLES } from "@/constants/mills";
 import { PlusIcon, SparklesIcon, TrashIcon } from "@/components/icons";
 import { requestOptimization } from "@/services/openai";
 import { calculateWeight, getSetTotals } from "@/utils/calculations";
 import { exportToExcel, exportToPdf } from "@/utils/export";
-import type { RollInput, SetColumn } from "@/types";
+import type { HistoryItem, HistorySummary, RollInput, SetColumn } from "@/types";
+import {
+  deleteCalculation,
+  fetchCalculation,
+  listHistory,
+  saveCalculation,
+  updateCalculation,
+} from "@/services/history";
+import { useSupabaseAuthContext } from "@/components/supabase-provider";
+import toast, { Toaster } from "react-hot-toast";
 
 const DEFAULT_ROLL_COUNT = 3;
 const DEFAULT_SET_COUNT = 3;
@@ -28,6 +37,8 @@ function createSet(id: string): SetColumn {
 }
 
 export default function HomePage() {
+  const { user, isLoading, signInWithGoogle, signOut } =
+    useSupabaseAuthContext();
   const [mill, setMill] = useState<string>(Object.keys(MILL_DECKLES)[0]);
   const [substance, setSubstance] = useState<number>(80);
   const [length, setLength] = useState<number>(9000);
@@ -42,7 +53,36 @@ export default function HomePage() {
     )
   );
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [history, setHistory] = useState<HistorySummary[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(
+    null,
+  );
   const deckle = MILL_DECKLES[mill];
+
+  const isAuthenticated = Boolean(user);
+
+  const loadHistory = useCallback(async () => {
+    if (!isAuthenticated) {
+      setHistory([]);
+      return;
+    }
+    setIsHistoryLoading(true);
+    try {
+      const items = await listHistory();
+      setHistory(items);
+    } catch (error) {
+      console.error("Failed to load history", error);
+      toast.error("기록을 불러오지 못했습니다.");
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   const totals = useMemo(
     () =>
@@ -240,8 +280,96 @@ export default function HomePage() {
     }
   };
 
+  const buildSnapshot = (): HistoryItem["data"] => ({
+    mill,
+    substance,
+    length,
+    rolls,
+    sets,
+  });
+
+  const applySnapshot = (snapshot: HistoryItem["data"]) => {
+    setMill(snapshot.mill);
+    setSubstance(snapshot.substance);
+    setLength(snapshot.length);
+    setSets(snapshot.sets);
+    setRolls(snapshot.rolls);
+  };
+
+  const handleSaveHistory = async () => {
+    if (!isAuthenticated) {
+      toast.error("Google 로그인 후 이용해주세요.");
+      return;
+    }
+
+    const name = window.prompt("저장할 이름을 입력하세요", "새 계산");
+    if (!name) return;
+
+    setIsSaving(true);
+    try {
+      const { item } = await saveCalculation({
+        name,
+        snapshot: buildSnapshot(),
+      });
+      setHistory((prev) => [item, ...prev.filter((i) => i.id !== item.id)]);
+      setSelectedHistoryId(item.id);
+      toast.success("저장 완료");
+    } catch (error) {
+      console.error(error);
+      toast.error("저장에 실패했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUpdateHistory = async (id: string) => {
+    try {
+      const { item } = await updateCalculation({
+        id,
+        snapshot: buildSnapshot(),
+      });
+      setHistory((prev) =>
+        prev.map((historyItem) =>
+          historyItem.id === item.id ? { ...historyItem, ...item } : historyItem,
+        ),
+      );
+      toast.success("업데이트 완료");
+    } catch (error) {
+      console.error(error);
+      toast.error("업데이트에 실패했습니다.");
+    }
+  };
+
+  const handleDeleteHistory = async (id: string) => {
+    if (!confirm("정말 삭제하시겠습니까?")) return;
+
+    try {
+      await deleteCalculation(id);
+      setHistory((prev) => prev.filter((item) => item.id !== id));
+      if (selectedHistoryId === id) {
+        setSelectedHistoryId(null);
+      }
+      toast.success("삭제 완료");
+    } catch (error) {
+      console.error(error);
+      toast.error("삭제에 실패했습니다.");
+    }
+  };
+
+  const handleLoadHistory = async (id: string) => {
+    try {
+      const { item } = await fetchCalculation(id);
+      applySnapshot(item.data);
+      setSelectedHistoryId(id);
+    } catch (error) {
+      console.error(error);
+      toast.error("기록을 불러오지 못했습니다.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-100">
+      <Toaster position="top-right" />
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-6 md:flex-row md:items-center md:justify-between">
           <div>
@@ -252,15 +380,153 @@ export default function HomePage() {
               초지기 트림 사이즈 계산기 (MVP)
           </h1>
           </div>
-          <div className="flex items-center gap-2 text-sm text-slate-500">
+          <div className="flex items-center gap-3 text-sm text-slate-500">
             <span>Deckle 최소: {deckle.min}mm</span>
             <span className="hidden md:inline">·</span>
             <span>Deckle 최대: {deckle.max}mm</span>
+            <span className="hidden md:inline">·</span>
+            {isLoading ? (
+              <span className="text-slate-400">로그인 상태 확인 중...</span>
+            ) : isAuthenticated ? (
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-slate-700">
+                  {user?.email ?? user?.id}
+                </span>
+                <button
+                  onClick={signOut}
+                  className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  로그아웃
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={signInWithGoogle}
+                className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                Google 로그인
+              </button>
+            )}
           </div>
         </div>
       </header>
 
       <main className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8">
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">내 계산 기록</h2>
+              <p className="text-sm text-slate-500">
+                저장한 계산을 불러오거나 이름을 변경하고 삭제할 수 있습니다.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={loadHistory}
+                disabled={!isAuthenticated || isHistoryLoading}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+              >
+                새로고침
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveHistory}
+                disabled={!isAuthenticated || isSaving}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+              >
+                {isSaving ? "저장 중..." : "현재 계산 저장"}
+              </button>
+              {selectedHistoryId && (
+                <button
+                  type="button"
+                  onClick={() => handleUpdateHistory(selectedHistoryId)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  현재 내용으로 덮어쓰기
+                </button>
+              )}
+            </div>
+          </div>
+
+          {!isAuthenticated ? (
+            <div className="mt-6 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+              Google 로그인 후 계산 기록을 저장하거나 불러올 수 있습니다.
+            </div>
+          ) : isHistoryLoading ? (
+            <div className="mt-6 rounded-lg border border-slate-100 bg-slate-50 p-6 text-center text-sm text-slate-500">
+              기록을 불러오는 중입니다...
+            </div>
+          ) : history.length === 0 ? (
+            <div className="mt-6 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+              저장된 계산이 없습니다. 현재 계산을 저장해보세요.
+            </div>
+          ) : (
+            <ul className="mt-6 space-y-3">
+              {history.map((item) => {
+                const isActive = item.id === selectedHistoryId;
+                return (
+                  <li
+                    key={item.id}
+                    className={`flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between ${
+                      isActive ? "border-blue-500 shadow" : ""
+                    }`}
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">
+                        {item.name}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        저장: {new Date(item.created_at).toLocaleString()} · 수정: {new Date(item.updated_at).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleLoadHistory(item.id)}
+                        className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                      >
+                        불러오기
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const newName = prompt("새 이름을 입력하세요", item.name);
+                          if (!newName) return;
+                          try {
+                            const { item: updated } = await updateCalculation({
+                              id: item.id,
+                              name: newName,
+                            });
+                            setHistory((prev) =>
+                              prev.map((h) =>
+                                h.id === updated.id ? { ...h, ...updated } : h,
+                              ),
+                            );
+                            toast.success("이름을 변경했습니다.");
+                          } catch (error) {
+                            console.error(error);
+                            toast.error("이름 변경에 실패했습니다.");
+                          }
+                        }}
+                        className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                      >
+                        이름 변경
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteHistory(item.id)}
+                        className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:bg-rose-100"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">1. 생산 기본 조건</h2>
           <p className="mt-1 text-sm text-slate-500">

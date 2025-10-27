@@ -30,14 +30,51 @@ export async function POST(request: NextRequest) {
 
   try {
     const completion = await openai.responses.create({
-      model: "gpt-4.1-mini",
+      model: "gpt-5-mini",
       input: prompt,
       max_output_tokens: 800,
-      temperature: 0.3,
+      reasoning: { effort: "medium" },
+      text: { verbosity: "low" },
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "TrimPlan",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              sets: {
+                type: "array",
+                maxItems: 5,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    multiplier: {
+                      type: "integer",
+                      minimum: 1,
+                      maximum: 20,
+                    },
+                    combination: {
+                      type: "object",
+                      additionalProperties: {
+                        type: "integer",
+                        minimum: 0,
+                        maximum: 99,
+                      },
+                    },
+                  },
+                  required: ["multiplier", "combination"],
+                },
+              },
+            },
+            required: ["sets"],
+          },
+        },
+      },
     });
 
-    const text = completion.output_text();
-    const suggestion = parseResponse(text);
+    const suggestion = completion.output?.[0]?.parsed ?? { sets: [] };
 
     return NextResponse.json(suggestion);
   } catch (error) {
@@ -57,69 +94,30 @@ function buildPrompt({
   const rollDescription = requiredRolls
     .map(
       (roll, index) =>
-        `${index + 1}. width=${roll.width}mm, required_tons=${roll.tons} (id=${roll.id})`
+        `${index + 1}. id=${roll.id}, width=${roll.width}mm, required_tons=${roll.tons}`
     )
     .join("\n");
 
-  return `You are assisting a paper mill planner. Deckle range: ${deckle.min}mm to ${deckle.max}mm for mill ${mill}.
-Required rolls (with ids):
+  return `You are an expert paper mill planner.
+Deckle range per set: ${deckle.min}mm to ${deckle.max}mm for mill ${mill}.
+
+Each set contains integer roll quantities. Multiplier means how many times to repeat the set.
+Constraints:
+- Deckle sum = Σ(width_mm × quantity) must be within the range.
+- Produced tons for roll i = width_mm/1000 × 9000m ×  (substance/1000) × quantity.
+- Match required_tons for each roll as closely as possible without going under when feasible.
+- Use ≤ 5 sets and keep multipliers ≤ 10.
+
+Required roll data:
 ${rollDescription}
 
-Propose up to 5 set combinations. Each set must respect the deckle range when summing widths.
-Return JSON with structure: {"sets":[{"multiplier":number,"combination":{"roll-id":quantity,...}}]}
-Do not include commentary. If impossible, return {"sets":[]}.
+Return ONLY valid JSON matching this exact schema:
+{"sets":[{"multiplier":number,"combination":{"roll_0":number,"roll_1":number,...}}]}
+Example:
+{"sets":[{"multiplier":2,"combination":{"roll_0":3,"roll_1":1}}]}
+
+If no feasible plan exists, return {"sets":[]}.
 `;
 }
 
-function parseResponse(text: string) {
-  try {
-    const jsonStart = text.indexOf("{");
-    const jsonEnd = text.lastIndexOf("}");
-    if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error("No JSON found in response");
-    }
-    const jsonString = text.slice(jsonStart, jsonEnd + 1);
-    const parsed = JSON.parse(jsonString);
-
-    if (!Array.isArray(parsed.sets)) {
-      return { sets: [] };
-    }
-
-    const sanitizedSets = parsed.sets
-      .map((set: unknown) => {
-        if (
-          typeof set !== "object" ||
-          set === null ||
-          Array.isArray(set) ||
-          typeof (set as { combination?: unknown }).combination !== "object"
-        ) {
-          return null;
-        }
-
-        const multiplierValue = Number((set as { multiplier?: unknown }).multiplier) || 1;
-        const combinationEntries = Object.entries(
-          (set as { combination: Record<string, unknown> }).combination
-        )
-          .map(([rollId, qty]) => [rollId, Number(qty) || 0])
-          .filter(([, qty]) => qty > 0);
-
-        if (!combinationEntries.length) {
-          return null;
-        }
-
-        return {
-          multiplier: multiplierValue,
-          combination: Object.fromEntries(combinationEntries) as Record<string, number>,
-        };
-      })
-      .filter((set): set is { multiplier: number; combination: Record<string, number> } =>
-        Boolean(set)
-      );
-
-    return { sets: sanitizedSets };
-  } catch (error) {
-    console.error("Failed to parse OpenAI response", error);
-    return { sets: [] };
-  }
-}
 
